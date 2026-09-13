@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#3b6ef5" />
+    <meta name="description" content="拍照识别书本词语，自动识别中文、拼音和英文，按你设置的次数和间隔播报给小朋友听写。" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="自动听写" />
+    <title>自动听写 · 拍照出词，念给孩子听</title>
+    <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="topbar__brand">
+          <span class="topbar__logo" aria-hidden="true">听</span>
+          <div class="topbar__titles">
+            <h1 id="project-name" class="topbar__title">自动听写</h1>
+            <p id="project-meta" class="topbar__meta">拍照 → 出词 → 念给孩子听写</p>
+          </div>
+        </div>
+
+        <nav class="tabs" id="tabs" aria-label="主要步骤">
+          <button type="button" class="tab" data-screen="photos">
+            <span class="tab__index">1</span><span class="tab__label">拍照识别</span>
+          </button>
+          <button type="button" class="tab" data-screen="words">
+            <span class="tab__index">2</span><span class="tab__label">核对词语</span>
+          </button>
+          <button type="button" class="tab" data-screen="play">
+            <span class="tab__index">3</span><span class="tab__label">开始听写</span>
+          </button>
+        </nav>
+
+        <div class="topbar__actions">
+          <button type="button" class="btn btn--ghost" id="btn-library" title="我的听写本">听写本</button>
+          <button type="button" class="btn btn--ghost" id="btn-settings" title="播报设置">设置</button>
+        </div>
+      </header>
+
+      <main class="screens" id="screens">
+        <section class="screen" data-screen="library" hidden></section>
+        <section class="screen" data-screen="photos" hidden></section>
+        <section class="screen" data-screen="words" hidden></section>
+        <section class="screen" data-screen="play" hidden></section>
+      </main>
+    </div>
+
+    <div id="busy-overlay" class="busy" hidden aria-live="polite">
+      <div class="busy__card">
+        <div class="busy__spinner" aria-hidden="true"></div>
+        <p class="busy__text" id="busy-text">处理中…</p>
+        <div class="busy__bar"><div class="busy__fill" id="busy-fill"></div></div>
+      </div>
+    </div>
+
+    <div id="modal-root"></div>
+    <div id="toast-host" class="toast-host" aria-live="polite"></div>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

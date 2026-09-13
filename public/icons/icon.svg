@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="自动听写">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3b6ef5" />
+      <stop offset="1" stop-color="#7aa2ff" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)" />
+  <!-- 书页 -->
+  <path d="M120 156c0-14 11-25 25-25h92c18 0 30 9 30 24v192c0-15-12-24-30-24h-92c-14 0-25 11-25 25V156z" fill="#ffffff" opacity="0.94" />
+  <path d="M392 156c0-14-11-25-25-25h-92c-18 0-30 9-30 24v192c0-15 12-24 30-24h92c14 0 25 11 25 25V156z" fill="#ffffff" opacity="0.78" />
+  <!-- 声波 -->
+  <g stroke="#ffffff" stroke-linecap="round" fill="none" opacity="0.95">
+    <path d="M236 236v60" stroke-width="18" />
+    <path d="M204 248v36" stroke-width="14" />
+    <path d="M172 254v24" stroke-width="12" />
+    <path d="M268 248v36" stroke-width="14" />
+    <path d="M300 254v24" stroke-width="12" />
+  </g>
+</svg>

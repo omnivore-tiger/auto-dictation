@@ -1,0 +1,17 @@
+# 依赖与构建产物
+node_modules/
+dist/
+npm-debug.log*
+
+# 本地工具缓存/临时产物
+.npm-cache/
+verification/
+
+# 系统/编辑器文件
+.DS_Store
+Thumbs.db
+*.log
+
+# 环境/密钥（本项目无密钥，预留防误提交）
+.env
+.env.*
