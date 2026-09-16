@@ -292,6 +292,29 @@ async function main() {
     const firstScreen = await cdp.evaluate(`document.querySelector('#screens .screen:not([hidden])')?.dataset.screen`);
     console.log('首屏：', firstScreen);
     if (firstScreen !== 'photos') problems.push(`首屏应为 photos，实际为 ${firstScreen}`);
+
+    // 关键回归检查：hidden 属性必须真的把元素藏起来（作者样式里的 display 会覆盖 UA 的 [hidden]）
+    const visual = await cdp.evaluate(`
+      (() => {
+        const busy = document.getElementById('busy-overlay');
+        const visibleScreens = [...document.querySelectorAll('#screens .screen')]
+          .filter((s) => getComputedStyle(s).display !== 'none')
+          .map((s) => s.dataset.screen);
+        return {
+          busyDisplay: busy ? getComputedStyle(busy).display : null,
+          busyVisible: busy ? getComputedStyle(busy).display !== 'none' : false,
+          visibleScreens
+        };
+      })()
+    `);
+    console.log('可见性检查：', JSON.stringify(visual));
+    if (visual.busyVisible) problems.push('忙碌遮罩(busy-overlay)一直显示，遮盖了界面');
+    if (visual.visibleScreens.length !== 1) {
+      problems.push(`同时显示了 ${visual.visibleScreens.length} 个屏幕：[${visual.visibleScreens}]，应只有 1 个`);
+    }
+    if (visual.visibleScreens[0] !== 'photos') {
+      problems.push(`实际可见的屏幕应为 photos，实际为 ${visual.visibleScreens[0]}`);
+    }
     await cdp.screenshot(path.join(shots, '1-拍照识别.png'));
 
     // --- 预置词条，检查解析 + 拼音 + 界面 ---

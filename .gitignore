@@ -15,3 +15,6 @@ Thumbs.db
 # 环境/密钥（本项目无密钥，预留防误提交）
 .env
 .env.*
+
+# 本地备忘（不提交公开仓库）
+.dsh-REMEMBER.md
