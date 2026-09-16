@@ -10,7 +10,7 @@ import { parsePastedList } from '../core/parser.js';
 import { makeId } from '../core/text.js';
 import { deletePhoto, listPhotos, savePhoto } from '../core/storage.js';
 import { go, persist, state, touch } from './state.js';
-import { clear, confirmAction, el, humanMs, toast } from './utils.js';
+import { clear, confirmAction, el, humanMs, openImagePreview, toast } from './utils.js';
 
 /** 界面上的识别选项（不参与保存，属于本机偏好） */
 const ocrOptions = {
@@ -208,14 +208,30 @@ function buildPhotoCard(photo, index) {
 
   const status = el('span', { class: 'badge', text: photo.text ? `已识别 ${photo.text.replace(/\s/g, '').length} 字` : '待识别' });
 
+  const photoLabel = photo.name || `照片 ${index + 1}`;
+  const showOriginal = () => openImagePreview(photo.dataUrl, `第 ${index + 1} 张 · ${photoLabel}`);
+
   return el('div.card.photo-card', {}, [
     el('div.photo-card__head', {}, [
-      el('img.photo-card__thumb', { src: photo.dataUrl, alt: `第 ${index + 1} 张照片`, loading: 'lazy' }),
+      el('img.photo-card__thumb', {
+        src: photo.dataUrl,
+        alt: `第 ${index + 1} 张照片`,
+        loading: 'lazy',
+        title: '点一下看原图',
+        onclick: showOriginal
+      }),
       el('div.photo-card__info', {}, [
-        el('div.photo-card__name', { text: photo.name || `照片 ${index + 1}` }),
+        el('div.photo-card__name', { text: photoLabel }),
         el('div.photo-card__badges', {}, [status])
       ]),
       el('div.photo-card__actions', {}, [
+        el('button', {
+          type: 'button',
+          class: 'btn btn--outline btn--sm',
+          text: '看原图',
+          title: '放大查看这张照片',
+          onclick: showOriginal
+        }),
         el('button', {
           type: 'button',
           class: 'btn btn--outline btn--sm',

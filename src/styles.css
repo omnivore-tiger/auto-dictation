@@ -702,6 +702,11 @@ textarea {
   border-radius: var(--radius-sm);
   border: 1px solid var(--line);
   background: var(--bg);
+  cursor: zoom-in;
+}
+
+.photo-card__thumb:hover {
+  border-color: var(--brand);
 }
 
 .photo-card__info {
@@ -718,6 +723,8 @@ textarea {
 
 .photo-card__actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
 }
 
@@ -1082,4 +1089,48 @@ textarea {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ------------------------------------------------------------------ 图片查看（看原图） */
+
+.image-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(8, 11, 18, 0.94);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+  padding: 14px;
+}
+
+.image-viewer__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #fff;
+}
+
+.image-viewer__title {
+  font-size: 14px;
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.image-viewer__close {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.35);
+  flex: 0 0 auto;
+}
+
+.image-viewer__img {
+  max-width: 100%;
+  max-height: 100%;
+  margin: 0 auto;
+  align-self: center;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
 }

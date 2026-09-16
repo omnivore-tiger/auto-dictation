@@ -104,3 +104,49 @@ export function humanMs(ms) {
   const rest = Math.round(seconds % 60);
   return `${minutes} 分 ${rest} 秒`;
 }
+
+/**
+ * 全屏查看一张图片：点缩略图或"看原图"时调用。
+ * 点图片以外的区域、点"关闭"、或按 Esc 都能关掉。
+ * @param {string} src 图片地址（dataURL 也可以）
+ * @param {string} [title]
+ */
+export function openImagePreview(src, title = '') {
+  const root = document.getElementById('modal-root');
+  if (!root) return;
+  clear(root);
+
+  const onKey = (event) => {
+    if (event.key === 'Escape') close();
+  };
+  const close = () => {
+    window.removeEventListener('keydown', onKey);
+    document.body.style.overflow = '';
+    clear(root);
+  };
+
+  // 打开时锁住背景滚动，关掉再恢复
+  document.body.style.overflow = 'hidden';
+
+  const overlay = el(
+    'div.image-viewer',
+    {
+      role: 'dialog',
+      'aria-label': title || '查看图片',
+      onclick: (event) => {
+        // 只有点到图片外面才关闭，避免误触
+        if (event.target === overlay) close();
+      }
+    },
+    [
+      el('div.image-viewer__bar', {}, [
+        el('span.image-viewer__title', { text: title || '查看图片' }),
+        el('button', { type: 'button', class: 'btn btn--ghost btn--sm image-viewer__close', text: '关闭', onclick: close })
+      ]),
+      el('img.image-viewer__img', { src, alt: title || '照片预览' })
+    ]
+  );
+
+  root.append(overlay);
+  window.addEventListener('keydown', onKey);
+}
