@@ -3,9 +3,10 @@
  */
 import { recognizeImage } from '../core/ocr.js';
 import { fileToDataUrl } from '../core/ocr.js';
+import { assembleItemsFromPhotos } from '../core/assemble.js';
 import { createItem } from '../core/model.js';
 import { annotate } from '../core/pinyin.js';
-import { parseOcrText, parsePastedList } from '../core/parser.js';
+import { parsePastedList } from '../core/parser.js';
 import { makeId } from '../core/text.js';
 import { deletePhoto, listPhotos, savePhoto } from '../core/storage.js';
 import { go, persist, state, touch } from './state.js';
@@ -337,37 +338,22 @@ async function runRecognition(targets) {
 }
 
 /**
- * 把当前所有照片的文字重新解析成词条。
- * 只在新解析出词条时替换，避免覆盖用户已经手改好的内容。
+ * 把照片文字整理成词条。
+ *
+ * 具体规则（含"多张图不串味"）都在 core/assemble.js 里，且有单元测试覆盖。
+ * 这里只负责把结果写回项目和提示用户。
  */
 function applyItemsToProject() {
-  const combined = state.photos
-    .map((photo) => String(photo.text ?? '').trim())
-    .filter(Boolean)
-    .join('\n');
-  if (!combined) return { created: 0 };
+  const { items, created, notes } = assembleItemsFromPhotos(state.photos ?? [], state.project.items ?? [], {
+    autoPinyin: annotate
+  });
+  state.project.items = items;
 
-  const { items, notes } = parseOcrText(combined, { autoPinyin: annotate });
-  if (items.length === 0) {
-    for (const note of notes) toast(note, 'warn');
-    return { created: 0 };
+  if (created > 0 || notes.length > 0) persist();
+  for (const note of notes) {
+    if (/没有识别出词条/.test(note)) continue;
+    toast(note, 'info');
   }
-
-  // 已经手动改过词条时，保留人工结果，把新词条追加在后面
-  const existing = state.project.items ?? [];
-  const merged = [...existing];
-  const existingZh = new Set(existing.map((item) => item.zh));
-  let created = 0;
-  for (const item of items) {
-    if (item.zh && existingZh.has(item.zh)) continue;
-    merged.push(item);
-    if (item.zh) existingZh.add(item.zh);
-    created += 1;
-  }
-  state.project.items = merged;
-  persist();
-
-  for (const note of notes) toast(note, 'info');
   return { created };
 }
 

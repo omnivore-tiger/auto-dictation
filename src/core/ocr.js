@@ -5,16 +5,17 @@
  * public/tessdata 与 public/tesseract，首次使用无需联网）。
  * 另外留了"云端识别"的接口：如果用户在设置里填了自己的接口地址，就走云端。
  *
- * 识别前会先做一次图像预处理（缩放、灰度、对比度拉伸、可选二值化），
+ * 识别前会先做一次图像预处理（缩放、灰度、对比度拉伸，可选二值化），
  * 这对课本照片（纸张发黄、光照不均、印刷体偏小）的提升很明显。
  */
-import { createWorker } from 'tesseract.js';
+import { PSM, createWorker } from 'tesseract.js';
 import { makeId } from './text.js';
 
 /** @typedef {{ id: string, name: string, dataUrl: string, text: string, notes: string[], createdAt: number }} PhotoResult */
 
-const MAX_EDGE = 1800;
-const MIN_EDGE = 900;
+// 汉字笔画细，分辨率太低 Tesseract 容易把字认错；这里比原来放大一档。
+const MAX_EDGE = 2200;
+const MIN_EDGE = 1200;
 
 /**
  * 读取文件为 dataURL。
@@ -84,7 +85,9 @@ export function otsuThreshold(gray) {
  * @returns {Promise<{ dataUrl: string, width: number, height: number, threshold: number }>}
  */
 export async function preprocessImage(dataUrl, options = {}) {
-  const binarize = options.binarize !== false;
+  // 默认不做二值化：全局 Otsu 阈值会把细笔画的汉字切碎，
+  // 而 Tesseract 内部本来就有自适应阈值。交给它处理更准。
+  const binarize = options.binarize === true;
   const maxEdge = options.maxEdge ?? MAX_EDGE;
   const image = await loadImage(dataUrl);
   const naturalWidth = image.naturalWidth || image.width;
@@ -183,9 +186,11 @@ async function getWorker(lang, onProgress) {
 
 /**
  * 包一层 createWorker，兼容不同小版本的 API（v5 支持直接传 options）。
+ * 建好之后再设一次识别参数：课本词表基本是"一整块均匀文本"，
+ * PSM 6 比默认的自动分段准得多；保留词间空格则方便后面按拼音/英文切词。
  */
 async function createWorkerWithProgress(lang, options, onProgress) {
-  return createWorker(lang, 1, {
+  const instance = await createWorker(lang, 1, {
     workerPath: options.workerPath,
     corePath: options.corePath,
     langPath: options.langPath,
@@ -197,6 +202,17 @@ async function createWorkerWithProgress(lang, options, onProgress) {
     },
     errorHandler: (error) => console.warn('Tesseract 内部错误：', error)
   });
+  try {
+    await instance.setParameters({
+      tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
+      preserve_interword_spaces: '1',
+      // Tesseract 拿不到图片 DPI 时会自己乱猜，猜错会严重影响识别率；直接告诉它 300
+      user_defined_dpi: '300'
+    });
+  } catch (error) {
+    console.warn('设置识别参数失败，改用默认参数：', error);
+  }
+  return instance;
 }
 
 /**
@@ -209,7 +225,7 @@ async function createWorkerWithProgress(lang, options, onProgress) {
 export async function recognizeLocal(dataUrl, options = {}) {
   const lang = options.lang ?? 'chi_sim+eng';
   options.onProgress?.({ status: 'preprocess', progress: 0, stage: '预处理图片…' });
-  const preprocessed = await preprocessImage(dataUrl, {});
+  const preprocessed = await preprocessImage(dataUrl, { binarize: options.binarize });
   options.onProgress?.({ status: 'loading tesseract', progress: 0.02, stage: '准备识别引擎…' });
   const instance = await getWorker(lang, (message) => {
     options.onProgress?.({ status: message.status, progress: 0.05 + message.progress * 0.15, stage: describeStatus(message.status) });
@@ -292,7 +308,11 @@ export async function recognizeImage(dataUrl, options = {}) {
     options.onProgress?.({ status: 'done', progress: 1, stage: '识别完成' });
     return { text, engine: 'remote' };
   }
-  const text = await recognizeLocal(dataUrl, { lang: options.lang, onProgress: options.onProgress });
+  const text = await recognizeLocal(dataUrl, {
+    lang: options.lang,
+    binarize: options.binarize,
+    onProgress: options.onProgress
+  });
   return { text, engine: 'local' };
 }
 

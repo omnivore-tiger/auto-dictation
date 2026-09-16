@@ -46,6 +46,15 @@
   box-sizing: border-box;
 }
 
+/*
+ * 关键修复：HTML 的 hidden 属性用的是"用户代理样式表"里的 display:none，
+ * 优先级低于本文件里任何带 display 的类选择器（如 .busy/.screen）。
+ * 结果就是设置了 hidden 也照样显示。这里强制让 hidden 生效。
+ */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;

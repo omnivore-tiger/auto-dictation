@@ -93,7 +93,13 @@ export function createItem(patch = {}) {
     zhRepeatOverride: typeof patch.zhRepeatOverride === 'number' ? patch.zhRepeatOverride : null,
     enRepeatOverride: typeof patch.enRepeatOverride === 'number' ? patch.enRepeatOverride : null,
     /** 是否纳入听写（可以临时跳过某个词） */
-    enabled: patch.enabled !== false
+    enabled: patch.enabled !== false,
+    /**
+     * 这条词是从哪张照片解析出来的（手动添加的为空）。
+     * 用来保证多张照片的词语互不串味：重新识别某张图时，
+     * 只替换这一张解析出来的词条，不影响别的图和手动添加的词。
+     */
+    sourcePhotoId: typeof patch.sourcePhotoId === 'string' ? patch.sourcePhotoId : ''
   };
 }
 
@@ -155,6 +161,7 @@ export function reviveProject(input) {
  * @property {number|null} zhRepeatOverride
  * @property {number|null} enRepeatOverride
  * @property {boolean} enabled
+ * @property {string} sourcePhotoId
  */
 
 /**
