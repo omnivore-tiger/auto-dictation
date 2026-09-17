@@ -7,7 +7,7 @@
  *   2. 解析结果一定是可编辑的数组，不做任何不可逆的丢弃。
  */
 import { createItem } from './model.js';
-import { extractHan, hasHan, hasLatin, hasToneMark, normalizeSpaces, toLines } from './text.js';
+import { extractHan, hasHan, hasLatin, hasToneMark, normalizeSpaces } from './text.js';
 
 /** 汉字、数字圈号等与字母之间插入空格，便于后续切片 */
 const SEPARATOR_RE = /[\s,，、;；:：.。!！?？/\\|()[\]{}<>《》「」『』""''"'"'\-—–~·…*#@&+=%$^_]+/u;
@@ -278,67 +278,149 @@ export function splitEnglishWords(text) {
 /**
  * 把 OCR 出来的整段文本解析成词条数组。
  *
+ * 支持两种最常见的课本排版：
+ *   1. 行内对照： 「apple 苹果」「乌鸦 wū yā crow」
+ *   2. 分栏对照： 左栏英文、右栏中文。OCR 有可能一行一行读（每行中英各一个），
+ *      也有可能先把一整栏读完再读另一栏。
+ *
+ * 第 2 种最容易出错：如果只是简单地"下一行英文挂到上一个中文"，
+ * 一整栏英文会全部挤到同一个词上，中英文就对岔了。
+ * 所以这里先把文本整理成一"段"一"段"（连续的中文行算一段、连续的英文行算一段），
+ * 再让英文段/拼音段去找**数量相等**的那一段中文，逐条按顺序对上。
+ *
  * @param {string} text OCR 原始文本
  * @param {{ autoPinyin?: (zh: string) => string }} [options]
  * @returns {{ items: ReturnType<typeof createItem>[], notes: string[] }}
  */
 export function parseOcrText(text, options = {}) {
-  const lines = toLines(text);
-  /** @type {ReturnType<typeof createItem>[]} */
-  const items = [];
-  /** @type {string[]} */
-  const notes = [];
+  /** @type {{ kind: 'zh'|'en'|'pinyin', items: any[], words: string[], start?: number, end?: number }[]} */
+  const runs = [];
 
-  /** @type {{ kind: 'pinyin'|'english', value: string }|null} */
-  let pending = null;
-
-  const attachPending = (item) => {
-    if (!pending) return;
-    if (pending.kind === 'pinyin' && !item.pinyin) item.pinyin = pending.value;
-    else if (pending.kind === 'english' && !item.en) item.en = pending.value;
-    pending = null;
+  const pushRun = (kind, list) => {
+    const last = runs[runs.length - 1];
+    if (last && last.kind === kind) {
+      if (kind === 'zh') last.items.push(...list);
+      else last.words.push(...list);
+      return;
+    }
+    runs.push({
+      kind,
+      items: kind === 'zh' ? [...list] : [],
+      words: kind === 'zh' ? [] : [...list]
+    });
   };
 
-  for (const line of lines) {
-    const parsed = parseLine(line);
+  for (const rawLine of String(text ?? '').split(/\r?\n/)) {
+    const raw = String(rawLine ?? '').replace(NBSP, ' ');
+    if (!normalizeSpaces(raw)) continue;
 
-    if (parsed.pinyinOnly) {
-      const item = items[items.length - 1];
-      if (item && !item.pinyin && pending === null) {
-        // 拼音行紧跟在中文后面（注音在下方）
-        item.pinyin = parsed.pinyinOnly;
-      } else {
-        pending = { kind: 'pinyin', value: parsed.pinyinOnly };
-      }
+    /** @type {ReturnType<typeof createItem>[]} */
+    const zhItems = [];
+    /** @type {string[]} */
+    const enWords = [];
+    /** @type {string[]} */
+    const pyParts = [];
+
+    // 一行里可能被"宽空格"分成好几栏（表格排版）
+    for (const cell of splitCells(raw)) {
+      const parsed = parseLine(cell);
+      if (parsed.items.length > 0) zhItems.push(...parsed.items);
+      else if (parsed.pinyinOnly) pyParts.push(parsed.pinyinOnly);
+      else if (parsed.englishOnly) enWords.push(...splitEnglishWords(parsed.englishOnly));
+    }
+
+    if (zhItems.length > 0) {
+      // 同一行里被分栏成「中文 | 英文」时，就地逐条配对
+      attachByIndex(zhItems, pyParts, 'pinyin');
+      attachByIndex(zhItems, enWords, 'en');
+      pushRun('zh', zhItems);
       continue;
     }
-
-    if (parsed.englishOnly && parsed.items.length === 0) {
-      const item = items[items.length - 1];
-      if (item && !item.en && pending === null) {
-        item.en = parsed.englishOnly;
-      } else {
-        pending = { kind: 'english', value: parsed.englishOnly };
-      }
+    if (enWords.length > 0) {
+      pushRun('en', enWords);
       continue;
     }
-
-    for (const item of parsed.items) {
-      attachPending(item);
-      items.push(item);
-    }
+    if (pyParts.length > 0) pushRun('pinyin', pyParts);
   }
 
-  if (pending) {
-    const last = items[items.length - 1];
-    if (last) attachPending(last);
-    else if (pending.kind === 'english') {
-      for (const word of splitEnglishWords(pending.value)) items.push(createItem({ en: word }));
+  // 先把所有中文段按顺序展开，并记下每条在 items 里的下标区间
+  /** @type {ReturnType<typeof createItem>[]} */
+  const items = [];
+  for (const run of runs) {
+    if (run.kind !== 'zh') continue;
+    run.start = items.length;
+    items.push(...run.items);
+    run.end = items.length - 1;
+  }
+
+  // 再让每个英文/拼音段找到对应的中文段。
+  // 一段中文可以被"拼音"和"英文"各占用一次（例如拼音在上、英文在下），
+  // 但同一种内容不会重复占用同一段，否则交替排版（拼音/中文/拼音/中文）会配错。
+  /** @type {Map<number, Set<string>>} */
+  const usedBy = new Map();
+  const isFree = (idx, kind) => {
+    if (idx < 0 || idx >= runs.length || runs[idx].kind !== 'zh') return false;
+    const set = usedBy.get(idx);
+    return !set || !set.has(kind);
+  };
+  const markUsed = (idx, kind) => {
+    if (!usedBy.has(idx)) usedBy.set(idx, new Set());
+    /** @type {Set<string>} */ (usedBy.get(idx)).add(kind);
+  };
+
+  for (let i = 0; i < runs.length; i += 1) {
+    const run = runs[i];
+    if (run.kind === 'zh') continue;
+
+    const kind = run.kind;
+    const prevIdx = isFree(i - 1, kind) ? i - 1 : -1;
+    const nextIdx = isFree(i + 1, kind) ? i + 1 : -1;
+    const size = run.words.length;
+    const prevRun = prevIdx >= 0 ? runs[prevIdx] : null;
+    const nextRun = nextIdx >= 0 ? runs[nextIdx] : null;
+    const prevSize = prevRun ? (prevRun.end ?? 0) - (prevRun.start ?? 0) + 1 : 0;
+    const nextSize = nextRun ? (nextRun.end ?? 0) - (nextRun.start ?? 0) + 1 : 0;
+
+    // 优先配给"数量正好相等"的那一段；前面配不上再看后面
+    let chosenIdx = -1;
+    if (prevIdx >= 0 && prevSize === size) chosenIdx = prevIdx;
+    else if (nextIdx >= 0 && nextSize === size) chosenIdx = nextIdx;
+    else if (prevIdx >= 0) chosenIdx = prevIdx;
+    else if (nextIdx >= 0) chosenIdx = nextIdx;
+
+    /** @type {number[]} */
+    let targets = [];
+    if (chosenIdx >= 0) {
+      const chosen = /** @type {any} */ (runs[chosenIdx]);
+      if (chosen.end - chosen.start + 1 === size) {
+        targets = indexRange(chosen.start, chosen.end);
+      } else if (chosenIdx === prevIdx) {
+        targets = indexRange(Math.max(chosen.start, chosen.end - size + 1), chosen.end);
+      } else {
+        targets = indexRange(chosen.start, Math.min(chosen.end, chosen.start + size - 1));
+      }
+      markUsed(chosenIdx, kind);
     }
+
+    run.words.forEach((value, k) => {
+      const item = items[targets[k]];
+      if (!item) {
+        // 没配上中文的英文词单独成条（例如整张图只有英文）
+        if (kind === 'en') items.push(createItem({ en: value }));
+        return;
+      }
+      if (kind === 'pinyin') {
+        if (!item.pinyin) item.pinyin = value;
+      } else if (!item.en) {
+        item.en = value;
+      }
+    });
   }
 
   // 自动补拼音
   const autoPinyin = options.autoPinyin;
+  /** @type {string[]} */
+  const notes = [];
   if (typeof autoPinyin === 'function') {
     let filled = 0;
     for (const item of items) {
@@ -358,6 +440,47 @@ export function parseOcrText(text, options = {}) {
   }
 
   return { items, notes };
+}
+
+/** 一行里用连续 2 个及以上空格（或制表符）当作"分栏" */
+const COLUMN_GAP_RE = /[ \t\u3000]{2,}/u;
+
+/**
+ * 按"宽空格"把一行切成若干栏。
+ * 注意：单个空格不切分，因为 OCR 常把「乌鸦」读成「乌 鸦」。
+ * @param {string} raw
+ */
+export function splitCells(raw) {
+  return String(raw ?? '')
+    .split(COLUMN_GAP_RE)
+    .map((cell) => cell.trim())
+    .filter(Boolean);
+}
+
+/**
+ * 把一组值按顺序挂到一组词条上。
+ * @param {{ pinyin: string, en: string }[]} targetItems
+ * @param {string[]} values
+ * @param {'pinyin'|'en'} field
+ */
+function attachByIndex(targetItems, values, field) {
+  values.forEach((value, k) => {
+    const item = targetItems[k];
+    if (!item) return;
+    if (field === 'pinyin') {
+      if (!item.pinyin) item.pinyin = value;
+    } else if (!item.en) {
+      item.en = value;
+    }
+  });
+}
+
+/** 生成 [from, to] 的下标数组 */
+function indexRange(from, to) {
+  /** @type {number[]} */
+  const out = [];
+  for (let i = from; i <= to; i += 1) out.push(i);
+  return out;
 }
 
 /**

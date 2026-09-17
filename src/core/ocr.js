@@ -230,6 +230,14 @@ export async function recognizeLocal(dataUrl, options = {}) {
   const instance = await getWorker(lang, (message) => {
     options.onProgress?.({ status: message.status, progress: 0.05 + message.progress * 0.15, stage: describeStatus(message.status) });
   });
+  // 允许按需切换分段模式（不同排版用不同的 PSM 效果差别很大）
+  if (options.psm) {
+    try {
+      await instance.setParameters({ tessedit_pageseg_mode: String(options.psm) });
+    } catch (error) {
+      console.warn('切换分段模式失败：', error);
+    }
+  }
   const result = await instance.recognize(preprocessed.dataUrl);
   options.onProgress?.({ status: 'done', progress: 1, stage: '识别完成' });
   return String(result?.data?.text ?? '');
@@ -311,6 +319,7 @@ export async function recognizeImage(dataUrl, options = {}) {
   const text = await recognizeLocal(dataUrl, {
     lang: options.lang,
     binarize: options.binarize,
+    psm: options.psm,
     onProgress: options.onProgress
   });
   return { text, engine: 'local' };

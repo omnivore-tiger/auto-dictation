@@ -171,3 +171,58 @@ test('parsePastedList 支持「中文 拼音」和「英文」混写', () => {
     ]
   );
 });
+
+/* ---------------------------------------------------------------- 两栏对照表 */
+
+test('左栏英文 + 右栏中文：OCR 先读完英文栏时，中英文要按顺序一一对应', () => {
+  // 这是最容易被搞岔的排版：一列英文、一列中文，OCR 按栏输出
+  const { items } = parseOcrText('apple\nbanana\ncrow\n苹果\n香蕉\n乌鸦');
+  assert.deepEqual(
+    items.map((item) => [item.zh, item.en]),
+    [
+      ['苹果', 'apple'],
+      ['香蕉', 'banana'],
+      ['乌鸦', 'crow']
+    ]
+  );
+});
+
+test('左栏中文 + 右栏英文：OCR 先读完中文栏时也要一一对应', () => {
+  const { items } = parseOcrText('苹果\n香蕉\n乌鸦\napple\nbanana\ncrow');
+  assert.deepEqual(
+    items.map((item) => [item.zh, item.en]),
+    [
+      ['苹果', 'apple'],
+      ['香蕉', 'banana'],
+      ['乌鸦', 'crow']
+    ]
+  );
+});
+
+test('一行里用宽空格分成两栏（英文在前）也能对应', () => {
+  const { items } = parseOcrText('apple     banana    crow\n苹果       香蕉      乌鸦');
+  assert.deepEqual(
+    items.map((item) => [item.zh, item.en]),
+    [
+      ['苹果', 'apple'],
+      ['香蕉', 'banana'],
+      ['乌鸦', 'crow']
+    ]
+  );
+});
+
+test('中文一行里用宽空格分成多个词时，会各自成条（窄空格仍不切分）', () => {
+  const wide = parseOcrText('苹果    香蕉    乌鸦');
+  assert.deepEqual(wide.items.map((item) => item.zh), ['苹果', '香蕉', '乌鸦']);
+
+  const narrow = parseOcrText('苹 果 香 蕉');
+  assert.deepEqual(narrow.items.map((item) => item.zh), ['苹果香蕉']);
+});
+
+test('中英一行对照的中英数量不一致时，也不会把英文挂错到别的中文上', () => {
+  // 英文 1 条、中文 3 条：英文应只挂到相邻的那一条，其余中文保持空
+  const { items } = parseOcrText('苹果\n香蕉\n乌鸦\napple');
+  const pairs = items.map((item) => [item.zh, item.en]);
+  assert.deepEqual(pairs[2], ['乌鸦', 'apple']);
+  assert.equal(items.filter((item) => item.en).length, 1, '只有一条应该拿到英文');
+});
