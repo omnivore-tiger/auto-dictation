@@ -16,9 +16,14 @@ import { clear, confirmAction, el, humanMs, openImagePreview, toast } from './ut
 const ocrOptions = {
   lang: 'chi_sim+eng',
   autoRun: true,
+  /** 识别顺序：'row' 一行一行读；'column' 先把一列读完再读另一列 */
+  order: 'row',
   remoteEndpoint: '',
   remoteApiKey: ''
 };
+
+/** 识别顺序 → Tesseract 分段模式(PSM) */
+const ORDER_PSM = { row: '6', column: '4' };
 
 /** @type {File[]} */
 let pendingQueue = [];
@@ -127,6 +132,17 @@ function buildOptions() {
     el('option', { value: 'eng', text: '只识别英文', selected: ocrOptions.lang === 'eng' })
   ]);
 
+  const orderSelect = el('select', {
+    class: 'select',
+    title: '图片里中英文是怎么排的，就选哪种',
+    onchange: (event) => {
+      ocrOptions.order = event.target.value;
+    }
+  }, [
+    el('option', { value: 'row', text: '按行（一行一行读·推荐）', selected: ocrOptions.order === 'row' }),
+    el('option', { value: 'column', text: '按列（先读完一列再读另一列）', selected: ocrOptions.order === 'column' })
+  ]);
+
   const autoCheck = el('input', {
     type: 'checkbox',
     checked: ocrOptions.autoRun,
@@ -138,6 +154,7 @@ function buildOptions() {
 
   return el('div.card.card--flat options-row', {}, [
     el('label.field', {}, [el('span.field__label', { text: '识别语言' }), langSelect]),
+    el('label.field', {}, [el('span.field__label', { text: '识别顺序' }), orderSelect]),
     el('label.checkbox', {}, [autoCheck, el('span', { text: '上传后自动开始识别' })]),
     el('div.field', {}, [
       el('span.field__label', { text: '已有内容' }),
@@ -326,6 +343,7 @@ async function runRecognition(targets) {
       const { text } = await recognizeImage(photo.dataUrl, {
         mode: 'local',
         lang: ocrOptions.lang,
+        psm: ORDER_PSM[ocrOptions.order] ?? ORDER_PSM.row,
         onProgress: (info) => {
           const overall = (i + Math.min(1, Math.max(0, info.progress))) / total;
           if (progressText) progressText.textContent = `第 ${i + 1}/${total} 张：${info.stage}`;

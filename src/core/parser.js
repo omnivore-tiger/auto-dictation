@@ -171,9 +171,14 @@ function groupIntoSenses(segments) {
     if (seg.type === 'sep') continue;
 
     if (seg.type === 'han') {
-      // 连续汉字（中间只有空格）并入同一组；被拼音/英文打断后另起一组
-      const group = current && !absorbed ? /** @type {any} */ (current) : startGroup();
-      group.zh += seg.normalized;
+      // 相邻汉字块要不要并成一个词，取决于"是不是 OCR 把词拆开了"：
+      //   「乌 鸦」  → 单字挨着单字，多半是一个词被读散了，合并
+      //   「苹果 香蕉」→ 两边都是多字词，说明是并列的词表，各自成条（否则顺序就乱了）
+      // 被拼音/英文打断后一律另起一组。
+      const text = seg.normalized;
+      const canAppend = current && !absorbed && (text.length === 1 || String(current.zh).length === 1);
+      const group = canAppend ? /** @type {any} */ (current) : startGroup();
+      group.zh += text;
       continue;
     }
 
@@ -194,15 +199,26 @@ function groupIntoSenses(segments) {
     }
   }
 
-  // 没有汉字的"孤儿"内容（例如行首就是英文）统一并到第一个中文词条上，
-  // 因为这多半是 OCR 把同一行的中英对照读反了顺序。
+  // 没有汉字的"孤儿"内容（例如同一行里排在中文前面的英文）。
+  // 如果英文词数正好等于中文词数，说明是「左英文 右中文」的并列表格，
+  // 必须按顺序逐条对应；否则（只有一个英文词）才并到第一个中文词条上。
   const out = groups.filter((group) => group.zh);
   const orphans = groups.filter((group) => !group.zh && (group.pinyin || group.en));
   if (out.length > 0 && orphans.length > 0) {
-    const first = out[0];
-    for (const orphan of orphans) {
-      if (orphan.pinyin) first.pinyin = [first.pinyin, orphan.pinyin].filter(Boolean).join(' ');
-      if (orphan.en) first.en = [first.en, orphan.en].filter(Boolean).join(' ');
+    const orphanEn = orphans.flatMap((orphan) => (orphan.en ? orphan.en.split(/\s+/).filter(Boolean) : []));
+    const orphanPinyin = orphans.map((orphan) => orphan.pinyin).filter(Boolean).join(' ');
+
+    if (orphanEn.length > 1 && orphanEn.length === out.length) {
+      out.forEach((group, index) => {
+        if (!group.en) group.en = orphanEn[index];
+      });
+      if (orphanPinyin && !out[0].pinyin) out[0].pinyin = orphanPinyin;
+    } else {
+      const first = out[0];
+      for (const orphan of orphans) {
+        if (orphan.pinyin) first.pinyin = [first.pinyin, orphan.pinyin].filter(Boolean).join(' ');
+        if (orphan.en) first.en = [first.en, orphan.en].filter(Boolean).join(' ');
+      }
     }
   }
   // 整行都没有汉字时，把攒下来的内容原样返回，交给上层当英文处理

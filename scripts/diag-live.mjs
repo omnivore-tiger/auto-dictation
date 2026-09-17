@@ -55,7 +55,8 @@ const snap = await c.eval(`(()=>{
     screensWithVisibleStyle: screens.filter(s=>getComputedStyle(s).display!=='none').map(s=>s.dataset.screen),
     busyText: document.getElementById('busy-text')?.textContent||null,
     hasMain: !!window.__dictationApp,
-    bodyText: document.body.innerText.slice(0,200)
+    orderSelect: [...document.querySelectorAll('.options-row select')].map(s=>s.options[s.selectedIndex]?.text)||[],
+    bodyText: document.body.innerText.slice(0,600)
   };
 })()`);
 console.log('3秒后:', JSON.stringify(snap,null,2));

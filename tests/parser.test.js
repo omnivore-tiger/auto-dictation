@@ -226,3 +226,50 @@ test('中英一行对照的中英数量不一致时，也不会把英文挂错�
   assert.deepEqual(pairs[2], ['乌鸦', 'apple']);
   assert.equal(items.filter((item) => item.en).length, 1, '只有一条应该拿到英文');
 });
+
+/* ---------------------------------------------------------------- 顺序保持 */
+
+test('一行里「英文一列 + 中文一列」要按顺序逐条对应，不能合并也不能乱序', () => {
+  const { items } = parseOcrText('apple banana crow 苹果 香蕉 乌鸦');
+  assert.deepEqual(
+    items.map((item) => [item.zh, item.en]),
+    [
+      ['苹果', 'apple'],
+      ['香蕉', 'banana'],
+      ['乌鸦', 'crow']
+    ]
+  );
+});
+
+test('并列的多字中文词各自成条，不会并成一个词（保持图片里的顺序）', () => {
+  const { items } = parseOcrText('苹果 香蕉 乌鸦');
+  assert.deepEqual(items.map((item) => item.zh), ['苹果', '香蕉', '乌鸦']);
+});
+
+test('词条顺序跟随图片里的先后顺序', () => {
+  const { items } = parseOcrText('香蕉 苹果 乌鸦\nbanana apple crow');
+  assert.deepEqual(items.map((item) => item.zh), ['香蕉', '苹果', '乌鸦']);
+  assert.deepEqual(items.map((item) => item.en), ['banana', 'apple', 'crow']);
+});
+
+test('单字被 OCR 读散时仍然会合并成一个词', () => {
+  const { items } = parseOcrText('乌 鸦');
+  assert.deepEqual(items.map((item) => item.zh), ['乌鸦']);
+});
+
+test('单字散读与多字词混排：单字合并、多字词独立', () => {
+  const { items } = parseOcrText('乌 鸦 葡萄 朋友');
+  assert.deepEqual(items.map((item) => item.zh), ['乌鸦', '葡萄', '朋友']);
+});
+
+test('一列英文 + 一列中文（各占一行）也按顺序对应', () => {
+  const { items } = parseOcrText('apple banana crow\n苹果 香蕉 乌鸦');
+  assert.deepEqual(
+    items.map((item) => [item.zh, item.en]),
+    [
+      ['苹果', 'apple'],
+      ['香蕉', 'banana'],
+      ['乌鸦', 'crow']
+    ]
+  );
+});
