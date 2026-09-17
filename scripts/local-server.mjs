@@ -40,8 +40,10 @@ const server = createServer(async (req, res) => {
   if (!info) filePath = path.join(dist, 'index.html');
 
   let status = 200;
+  let size = 0;
   try {
     const body = await readFile(filePath);
+    size = body.length;
     res.writeHead(200, {
       'Content-Type': MIME[path.extname(filePath)] ?? 'application/octet-stream',
       'Cache-Control': 'no-store',
@@ -52,7 +54,7 @@ const server = createServer(async (req, res) => {
     status = 404;
     res.writeHead(404).end('not found');
   }
-  const line = `${new Date().toISOString()} | ${ip} | ${status} | ${Date.now() - started}ms | ${req.method} ${req.url} | UA=${ua.slice(0, 90)}\n`;
+  const line = `${new Date().toISOString()} | ${ip} | ${status} | ${size}B | ${Date.now() - started}ms | ${req.method} ${req.url} | UA=${ua.slice(0, 90)}\n`;
   process.stdout.write(line);
   await appendFile(logFile, line).catch(() => {});
 });
